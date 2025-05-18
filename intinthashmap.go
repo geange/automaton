@@ -45,9 +45,17 @@ func (m *IntIntHashmap) Get(key int32) (int32, bool) {
 }
 
 func (m *IntIntHashmap) get(key int32) (int32, bool) {
+	idx, exist := m.indexOf(key)
+	if !exist {
+		return 0, false
+	}
+	return m.values[idx], true
+}
+
+func (m *IntIntHashmap) indexOf(key int32) (int, bool) {
 	if key == 0 {
 		if m.hasEmptyKey {
-			return m.values[m.mask+1], true
+			return int(m.mask + 1), true
 		}
 		return 0, false
 	}
@@ -57,17 +65,13 @@ func (m *IntIntHashmap) get(key int32) (int32, bool) {
 	keys := m.keys
 	for {
 		if keys[idx] == key {
-			return m.values[idx], true
+			return int(idx), true
 		}
 		if keys[idx] == 0 {
 			return 0, false
 		}
 		idx = (idx + 1) & m.mask
 	}
-}
-
-func (m *IntIntHashmap) IndexOf(key int32) int {
-	panic("")
 }
 
 func (m *IntIntHashmap) IndexGet(index int) int {
