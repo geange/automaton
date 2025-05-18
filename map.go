@@ -3,6 +3,7 @@ package automaton
 //
 
 import (
+	"iter"
 	"sync"
 )
 
@@ -174,4 +175,19 @@ func (m *HashMap[T]) Size() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return m.size
+}
+
+func (m *HashMap[T]) Iterator() iter.Seq2[Hashable, T] {
+	return func(yield func(Hashable, T) bool) {
+		for _, bucket := range m.buckets {
+			if bucket == nil {
+				continue
+			}
+			for e := bucket; e != nil; e = e.next {
+				if !yield(e.key, e.value) {
+					return
+				}
+			}
+		}
+	}
 }
