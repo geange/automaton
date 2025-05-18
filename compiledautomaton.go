@@ -144,7 +144,7 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 	}
 
 	// This will determinize the binary automaton for us:
-	this.runAutomaton = NewByteRunAutomatonV1(binary, true, determinizeWorkLimit)
+	this.runAutomaton = NewByteRunAutomaton(binary, true, determinizeWorkLimit)
 	this.automaton = this.runAutomaton.automaton
 
 	// TODO: this is a bit fragile because if the automaton is not minimized there could be more than 1 sink state but this-prefix will fail

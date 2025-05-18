@@ -1,6 +1,7 @@
 package automaton
 
-func Mix32(v int) int {
+// MurmurHash3算法中的32位最终混合步骤
+func mix32(v int) int {
 	k := uint32(v)
 	k = (k ^ (k >> 16)) * 0x85ebca6b
 	k = (k ^ (k >> 13)) * 0xc2b2ae35

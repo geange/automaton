@@ -18,7 +18,7 @@ type RunAutomaton struct {
 	classmap []int
 }
 
-func NewRunAutomatonV1(a *Automaton, alphabetSize, determinizeWorkLimit int) *RunAutomaton {
+func NewRunAutomaton(a *Automaton, alphabetSize, determinizeWorkLimit int) *RunAutomaton {
 	size := max(1, a.GetNumStates())
 	points := a.GetStartPoints()
 

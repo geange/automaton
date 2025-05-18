@@ -5,13 +5,7 @@ type ByteRunAutomaton struct {
 	*RunAutomaton
 }
 
-func NewByteRunAutomaton(a *Automaton) *ByteRunAutomaton {
-	return &ByteRunAutomaton{
-		NewRunAutomatonV1(a, 256, 10000),
-	}
-}
-
-func NewByteRunAutomatonV1(a *Automaton, isBinary bool, determinizeWorkLimit int) *ByteRunAutomaton {
+func NewByteRunAutomaton(a *Automaton, isBinary bool, determinizeWorkLimit int) *ByteRunAutomaton {
 	var auto *Automaton
 
 	if isBinary {
@@ -21,7 +15,13 @@ func NewByteRunAutomatonV1(a *Automaton, isBinary bool, determinizeWorkLimit int
 	}
 
 	return &ByteRunAutomaton{
-		NewRunAutomatonV1(auto, 256, determinizeWorkLimit),
+		NewRunAutomaton(auto, 256, determinizeWorkLimit),
+	}
+}
+
+func (a *Automaton) NewByteRunAutomaton() *ByteRunAutomaton {
+	return &ByteRunAutomaton{
+		NewRunAutomaton(a, 256, 10000),
 	}
 }
 

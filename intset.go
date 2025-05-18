@@ -1,33 +1,30 @@
 package automaton
 
 type IntSet interface {
+	Hashable
+
 	GetArray() []int
 
 	Size() int
-
-	Hash() int64
 }
 
-var _ IntSet = &FrozenIntSet{}
+var _ IntSet = &MockIntSet{}
 
-type FrozenIntSet struct {
-	values   []int
-	state    int
-	hashCode int64
+type MockIntSet struct {
 }
 
-func NewFrozenIntSet(values []int, state int, hashCode int64) *FrozenIntSet {
-	return &FrozenIntSet{values: values, state: state, hashCode: hashCode}
+func (m MockIntSet) Hash() uint64 {
+	return 0
 }
 
-func (f *FrozenIntSet) GetArray() []int {
-	return f.values
+func (m MockIntSet) Equals(other Hashable) bool {
+	return false
 }
 
-func (f *FrozenIntSet) Size() int {
-	return len(f.values)
+func (m MockIntSet) GetArray() []int {
+	return make([]int, 0)
 }
 
-func (f *FrozenIntSet) Hash() int64 {
-	return f.hashCode
+func (m MockIntSet) Size() int {
+	return 0
 }

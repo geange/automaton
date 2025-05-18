@@ -29,16 +29,16 @@ func DeterminizeAutomaton(a *Automaton, workLimit int) *Automaton {
 	b := NewNewBuilder()
 
 	// Same initial values and state will always have the same hashCode
-	initialSet := NewFrozenIntSet([]int{0}, Mix32(0)+1, 0)
+	initialSet := NewFrozenIntSet([]int{0}, mix32(0)+1, 0)
 	// Create state 0:
 	b.CreateState()
 
 	worklist := make([]*FrozenIntSet, 0)
-	newState := NewMap[IntSet, int]()
+	newState := NewHashMap[int](WithCapacity(1))
 
 	worklist = append(worklist, initialSet)
 	b.SetAccept(0, a.IsAccept(0))
-	newState.Put(initialSet, 0)
+	newState.Set(initialSet, 0)
 
 	// TODO:
 
