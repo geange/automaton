@@ -6,6 +6,10 @@ const (
 	PHI_C64 = uint64(0x9e3779b97f4a7c15)
 )
 
+func mix(key int) int {
+	return mix32(key)
+}
+
 // MurmurHash3算法中的32位最终混合步骤
 func mix32(v int) int {
 	k := uint32(v)
