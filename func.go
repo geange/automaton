@@ -5,6 +5,6 @@ func MakeAnyString() *Automaton {
 	s := a.CreateState()
 	a.SetAccept(s, true)
 	a.AddTransition(s, s, 0, 255)
-	a.finishState()
+	a.FinishState()
 	return a
 }

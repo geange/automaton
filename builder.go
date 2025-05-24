@@ -83,7 +83,7 @@ func (r *Builder) Finish() *Automaton {
 			r.transitions[upto+3])
 	}
 
-	a.finishState()
+	a.FinishState()
 
 	return a
 }

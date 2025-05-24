@@ -222,7 +222,7 @@ func RemoveDeadStates(a *Automaton) *Automaton {
 		}
 	}
 
-	result.finishState()
+	result.FinishState()
 	//assert hasDeadStates(result) == false;
 	return result
 }
@@ -287,7 +287,7 @@ func reverseAutomatonIntSet(a *Automaton, initialStates map[int]struct{}) *Autom
 		s++
 	}
 
-	result.finishState()
+	result.FinishState()
 
 	return result
 }

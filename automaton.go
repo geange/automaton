@@ -12,7 +12,7 @@ import (
 // created using createState. Mark a state as an accept state using setAccept. Add transitions using
 // addTransition. Each state must have all of its transitions added at once; if this is too restrictive
 // then use Automaton.Builder instead. State 0 is always the initial state. Once a state is finished,
-// either because you've starting adding transitions to another state or you call finishState, then that
+// either because you've starting adding transitions to another state or you call FinishState, then that
 // states transitions are sorted (first by min, then max, then dest) and reduced (transitions with adjacent
 // labels going to the same dest are combined).
 type Automaton struct {
@@ -282,10 +282,11 @@ func (r *Automaton) IsDeterministic() bool {
 	return r.deterministic
 }
 
+// FinishState
 // Finishes the current state; call this once you are done adding transitions for a state.
 // This is automatically called if you start adding transitions to a new source state,
 // but for the last state you add you need to this method yourself.
-func (r *Automaton) finishState() {
+func (r *Automaton) FinishState() {
 	if r.curState != -1 {
 		r.finishCurrentState()
 		r.curState = -1
