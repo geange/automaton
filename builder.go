@@ -12,7 +12,7 @@ type Builder struct {
 	nextTransition int
 }
 
-func NewNewBuilder() *Builder {
+func NewBuilder() *Builder {
 	return NewBuilderV1(16, 16)
 }
 

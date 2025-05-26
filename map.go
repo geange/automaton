@@ -1,7 +1,5 @@
 package automaton
 
-//
-
 import (
 	"iter"
 	"sync"
