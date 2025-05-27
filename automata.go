@@ -3,6 +3,7 @@ package automaton
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math"
 	"unicode"
 )
@@ -333,7 +334,127 @@ func suffixIsZeros(bs []byte, size int) bool {
 }
 
 func (r *Automata) MakeDecimalInterval(min, max, digits int) (*Automaton, error) {
-	panic("")
+	x := fmt.Sprint(min)
+	y := fmt.Sprint(max)
+	if min > max {
+		return nil, errors.New("min > max")
+	}
+
+	var d int
+	if digits > 0 {
+		d = digits
+	} else {
+		d = len(y)
+	}
+
+	bx := new(bytes.Buffer)
+	for i := len(x); i < d; i++ {
+		bx.WriteByte('0')
+	}
+	bx.WriteString(x)
+	x = bx.String()
+
+	by := new(bytes.Buffer)
+	for i := len(y); i < d; i++ {
+		by.WriteByte('0')
+	}
+	by.WriteString(y)
+	y = by.String()
+
+	builder := NewBuilder()
+	if digits <= 0 {
+		builder.CreateState()
+	}
+
+	initials := make([]int, 0, 4)
+
+	between(builder, x, y, 0, initials, digits <= 0)
+
+	a1 := builder.Finish()
+
+	if digits <= 0 {
+		if err := a1.AddTransitionLabel(0, 0, '0'); err != nil {
+			return nil, err
+		}
+		for _, p := range initials {
+			a1.AddEpsilon(0, p)
+		}
+		a1.FinishState()
+	}
+
+	return a1, nil
+}
+
+func between(builder *Builder, x, y string, n int, initials []int, zeros bool) ([]int, int) {
+	s := builder.CreateState()
+	if len(x) == n {
+		builder.SetAccept(s, true)
+	} else {
+		if zeros {
+			initials = append(initials, s)
+		}
+		cx := x[n]
+		cy := y[n]
+		if cx == cy {
+			var state int
+			initials, state = between(builder, x, y, n+1, initials, zeros && cx == '0')
+
+			builder.AddTransitionLabel(s, state, int(cx))
+		} else { // cx<cy
+			var state int
+			initials, state = atLeast(builder, x, n+1, initials, zeros && cx == '0')
+			builder.AddTransitionLabel(s, state, int(cx))
+			builder.AddTransitionLabel(s, atMost(builder, y, n+1), int(cy))
+			if cx+1 < cy {
+				builder.AddTransition(s, anyOfRightLength(builder, x, n+1), int(cx+1), int(cy-1))
+			}
+		}
+	}
+	return initials, s
+}
+
+func atLeast(builder *Builder, x string, n int, initials []int, zeros bool) ([]int, int) {
+	s := builder.CreateState()
+	if len(x) == n {
+		builder.SetAccept(s, true)
+	} else {
+		if zeros {
+			initials = append(initials, s)
+		}
+		c := int(x[n])
+
+		var state int
+		initials, state = atLeast(builder, x, n+1, initials, zeros && c == '0')
+		builder.AddTransitionLabel(s, state, c)
+		if c < '9' {
+			builder.AddTransition(s, anyOfRightLength(builder, x, n+1), c+1, '9')
+		}
+	}
+	return initials, s
+}
+
+func atMost(builder *Builder, x string, n int) int {
+	s := builder.CreateState()
+	if len(x) == n {
+		builder.SetAccept(s, true)
+	} else {
+		c := int(x[n])
+		builder.AddTransitionLabel(s, atMost(builder, x, n+1), c)
+		if c > '0' {
+			builder.AddTransition(s, anyOfRightLength(builder, x, n+1), '0', c-1)
+		}
+	}
+	return s
+}
+
+func anyOfRightLength(builder *Builder, x string, n int) int {
+	s := builder.CreateState()
+	if len(x) == n {
+		builder.SetAccept(s, true)
+	} else {
+		builder.AddTransition(s, anyOfRightLength(builder, x, n+1), '0', '9')
+	}
+	return s
 }
 
 func (r *Automata) MakeString(s string) (*Automaton, error) {
