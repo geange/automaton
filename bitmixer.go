@@ -18,7 +18,7 @@ func mix32(v int) int {
 	return int(k ^ (k >> 16))
 }
 
-func mixPhi(k int32) int32 {
-	h := k * int32(PHI_C32)
-	return (h) ^ int32(uint32(h)>>16)
-}
+//func mixPhi(k int32) int32 {
+//	h := k * int32(PHI_C32)
+//	return (h) ^ int32(uint32(h)>>16)
+//}
