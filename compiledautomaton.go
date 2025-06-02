@@ -40,7 +40,7 @@ type CompiledAutomaton struct {
 // NewCompiledAutomaton
 // Create this. If finite is null, we use Operations.isFinite to determine whether it is finite. If simplify is true, we run possibly expensive operations to determine if the automaton is one the cases in CompiledAutomaton.AUTOMATON_TYPE. If simplify requires determinizing the automaton then at most determinizeWorkLimit effort will be spent. Any more than that will cause a TooComplexToDeterminizeException.
 func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bool,
-	determinizeWorkLimit int, isBinary bool) *CompiledAutomaton {
+	determinizeWorkLimit int, isBinary bool) (*CompiledAutomaton, error) {
 
 	this := &CompiledAutomaton{}
 
@@ -64,7 +64,7 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 			this.automaton = nil
 			this.finite = nil
 			this.sinkState = -1
-			return this
+			return this, nil
 		}
 
 		var isTotal bool
@@ -85,7 +85,7 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 			this.automaton = nil
 			this.finite = nil
 			this.sinkState = -1
-			return this
+			return this, nil
 		}
 
 		automaton = DeterminizeAutomaton(automaton, determinizeWorkLimit)
@@ -106,7 +106,7 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 				this.term, _ = unicodeIntsToBytes(singleton)
 			}
 			this.sinkState = -1
-			return this
+			return this, nil
 		}
 	}
 
@@ -135,7 +135,10 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 	if this.finite.Load() || automaton.GetNumStates()+automaton.GetNumTransitions() > 1000 {
 		this.commonSuffixRef = nil
 	} else {
-		suffix := GetCommonSuffixBytesRef(binary)
+		suffix, err := getCommonSuffixBytesRef(binary)
+		if err != nil {
+			return nil, err
+		}
 		if len(suffix) == 0 {
 			this.commonSuffixRef = nil
 		} else {
@@ -150,7 +153,7 @@ func NewCompiledAutomaton(automaton *Automaton, finite *atomic.Bool, simplify bo
 	// TODO: this is a bit fragile because if the automaton is not minimized there could be more than 1 sink state but this-prefix will fail
 	// to run for those:
 	this.sinkState = findSinkState(this.automaton)
-	return this
+	return this, nil
 }
 
 func findSinkState(automaton *Automaton) int {

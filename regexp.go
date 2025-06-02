@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type Kind int
@@ -240,6 +241,289 @@ func makeAutomaton(flags int, s string) *RegExp {
 
 func makeInterval(flags, min, max, digits int) *RegExp {
 	return newLeafNode(flags, REGEXP_INTERVAL, nil, 0, min, max, digits, 0, 0)
+}
+
+type Provider func(name string) (*Automaton, error)
+
+func (r *RegExp) toAutomatonInternal(automata map[string]*Automaton,
+	automatonProvider Provider, determinizeWorkLimit int) (*Automaton, error) {
+
+	list := make([]*Automaton, 0)
+	var a *Automaton
+	var err error
+	switch r.kind {
+	case REGEXP_UNION:
+		list = make([]*Automaton, 0)
+		if err := r.findLeaves(r.exp1, REGEXP_UNION, &list, automata, automatonProvider,
+			determinizeWorkLimit); err != nil {
+			return nil, err
+		}
+		if err := r.findLeaves(r.exp2, REGEXP_UNION, &list, automata, automatonProvider,
+			determinizeWorkLimit); err != nil {
+			return nil, err
+		}
+		a, err = union(list...)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_CONCATENATION:
+		list = make([]*Automaton, 0)
+		err := r.findLeaves(r.exp1, REGEXP_CONCATENATION, &list, automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		err = r.findLeaves(r.exp2, REGEXP_CONCATENATION, &list, automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		a, err = concatenate(list...)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_INTERSECTION:
+		a1, err := r.exp1.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		a2, err := r.exp2.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+
+		a, err = intersection(a1, a2)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_OPTIONAL:
+		a1, err := r.exp1.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+
+		a, err = optional(a1)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_REPEAT:
+		a1, err := r.exp1.toAutomatonInternal(
+			automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		a, err = repeat(a1)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_REPEAT_MIN:
+		a, err = r.exp1.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		minNumStates := (a.GetNumStates() - 1) * r.min
+		if minNumStates > determinizeWorkLimit {
+			return nil, fmt.Errorf("too complex to determinize: %d", minNumStates)
+		}
+		a, err = repeatCount(a, r.min)
+		if err != nil {
+			return nil, err
+		}
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_REPEAT_MINMAX:
+		a, err = r.exp1.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		minMaxNumStates := (a.GetNumStates() - 1) * r.max
+		if minMaxNumStates > determinizeWorkLimit {
+			return nil, fmt.Errorf("too complex to determinize: %d", minMaxNumStates)
+		}
+		a, err = repeatRange(a, r.min, r.max)
+		if err != nil {
+			return nil, err
+		}
+
+		break
+	case REGEXP_COMPLEMENT:
+		a1, err := r.exp1.toAutomatonInternal(automata, automatonProvider, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		a, err = complement(a1, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+
+		a, err = Minimize(a, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_CHAR:
+		if r.check(ASCII_CASE_INSENSITIVE) {
+			a, err = r.toCaseInsensitiveChar(rune(r.c), determinizeWorkLimit)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			a, err = defaultAutomata.MakeChar(int32(r.c))
+		}
+		break
+	case REGEXP_CHAR_RANGE:
+		a, err = defaultAutomata.MakeCharRange(int32(r.from), int32(r.to))
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_ANYCHAR:
+		a, err = defaultAutomata.MakeAnyChar()
+		if err != nil {
+			return nil, err
+		}
+		break
+	case REGEXP_EMPTY:
+		a = defaultAutomata.MakeEmpty()
+		break
+	case REGEXP_STRING:
+		if r.check(ASCII_CASE_INSENSITIVE) {
+			a, err = r.toCaseInsensitiveString(determinizeWorkLimit)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			a, err = defaultAutomata.MakeString(*r.s)
+			if err != nil {
+				return nil, err
+			}
+		}
+		break
+	case REGEXP_ANYSTRING:
+		a, err = defaultAutomata.MakeAnyString()
+		break
+	case REGEXP_AUTOMATON:
+		var aa *Automaton
+		if automata != nil {
+			aa = automata[*r.s]
+		}
+		if aa == nil && automatonProvider != nil {
+			aa, err = automatonProvider(*r.s)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if aa == nil {
+			return nil, fmt.Errorf("\"%s\" not found", *r.s)
+		}
+		a = aa
+		break
+	case REGEXP_INTERVAL:
+		a, err = defaultAutomata.MakeDecimalInterval(r.min, r.max, r.digits)
+		break
+	}
+	return a, nil
+}
+
+func (r *RegExp) toCaseInsensitiveChar(codepoint rune, determinizeWorkLimit int) (*Automaton, error) {
+	case1, err := defaultAutomata.MakeChar(codepoint)
+	if err != nil {
+		return nil, err
+	}
+	// For now we only work with ASCII characters
+	if codepoint > 128 {
+		return case1, nil
+	}
+	altCase := codepoint
+	if unicode.IsLower(codepoint) {
+		altCase = unicode.ToUpper(codepoint)
+	}
+
+	var result *Automaton
+	if altCase != codepoint {
+		case2, err := defaultAutomata.MakeChar(altCase)
+		if err != nil {
+			return nil, err
+		}
+		result, err = union(case1, case2)
+		if err != nil {
+			return nil, err
+		}
+		result, err = Minimize(result, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		result = case1
+	}
+	return result, nil
+}
+
+func (r *RegExp) toCaseInsensitiveString(determinizeWorkLimit int) (*Automaton, error) {
+	list := make([]*Automaton, 0)
+
+	for _, v := range []rune((*r.s)) {
+		a, err := r.toCaseInsensitiveChar(v, determinizeWorkLimit)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
+
+	automata, err := concatenate(list...)
+	if err != nil {
+		return nil, err
+	}
+	return Minimize(automata, determinizeWorkLimit)
+}
+
+func (r *RegExp) findLeaves(exp *RegExp, kind Kind, list *[]*Automaton,
+	automata map[string]*Automaton, automatonProvider Provider, determinizeWorkLimit int) error {
+	if exp.kind == kind {
+		if err := r.findLeaves(exp.exp1, kind, list, automata, automatonProvider,
+			determinizeWorkLimit); err != nil {
+			return err
+		}
+
+		if err := r.findLeaves(exp.exp2, kind, list, automata, automatonProvider,
+			determinizeWorkLimit); err != nil {
+			return err
+		}
+	} else {
+		automaton, err := exp.toAutomatonInternal(automata, automatonProvider,
+			determinizeWorkLimit)
+		if err != nil {
+			return err
+		}
+		*list = append(*list, automaton)
+	}
+	return nil
 }
 
 func (r *RegExp) more() bool {

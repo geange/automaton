@@ -8,6 +8,8 @@ import (
 	"unicode"
 )
 
+var defaultAutomata = &Automata{}
+
 type Automata struct {
 }
 

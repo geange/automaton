@@ -35,6 +35,25 @@ func (r *Builder) SetAccept(state int, accept bool) {
 	r.isAccept.SetTo(uint(state), accept)
 }
 
+func (r *Builder) Copy(other *Automaton) {
+	offset := r.GetNumStates()
+	otherNumStates := other.GetNumStates()
+
+	// Copy all states
+	r.CopyStates(other)
+
+	// Copy all transitions
+	t := NewTransition()
+
+	for s := 0; s < otherNumStates; s++ {
+		count := other.InitTransition(s, t)
+		for i := 0; i < count; i++ {
+			other.GetNextTransition(t)
+			r.AddTransition(offset+s, offset+t.Dest, t.Min, t.Max)
+		}
+	}
+}
+
 // CopyStates Copies over all states from other.
 func (r *Builder) CopyStates(other *Automaton) {
 	otherNumStates := other.GetNumStates()
@@ -86,4 +105,19 @@ func (r *Builder) Finish() *Automaton {
 	a.FinishState()
 
 	return a
+}
+
+func (r *Builder) GetNumStates() int {
+	return r.nextState
+}
+
+func (r *Builder) AddEpsilon(source, dest int) {
+	for upto := 0; upto < r.nextTransition; upto += 4 {
+		if r.transitions[upto] == dest {
+			r.AddTransition(source, r.transitions[upto+1], r.transitions[upto+2], r.transitions[upto+3])
+		}
+	}
+	if r.IsAccept(dest) {
+		r.SetAccept(source, true)
+	}
 }
