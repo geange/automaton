@@ -61,6 +61,18 @@ type regExpOption struct {
 }
 type RegExpOption func(*regExpOption)
 
+func WithSyntaxFlags(syntaxFlags int) RegExpOption {
+	return func(option *regExpOption) {
+		option.syntaxFlags = syntaxFlags
+	}
+}
+
+func WithMatchFlags(matchFlags int) RegExpOption {
+	return func(option *regExpOption) {
+		option.matchFlags = matchFlags
+	}
+}
+
 func NewRegExp(s string, options ...RegExpOption) (*RegExp, error) {
 	opts := &regExpOption{
 		syntaxFlags: ALL,
@@ -244,6 +256,36 @@ func makeInterval(flags, min, max, digits int) *RegExp {
 }
 
 type Provider func(name string) (*Automaton, error)
+
+type toAutomatonOptions struct {
+	automata          map[string]*Automaton
+	automatonProvider Provider
+}
+
+type ToAutomatonOptions func(*toAutomatonOptions)
+
+func WithAutomata(automata map[string]*Automaton) ToAutomatonOptions {
+	return func(options *toAutomatonOptions) {
+		options.automata = automata
+	}
+}
+
+func WithAutomatonProvider(automatonProvider Provider) ToAutomatonOptions {
+	return func(options *toAutomatonOptions) {
+		options.automatonProvider = automatonProvider
+	}
+}
+
+func (r *RegExp) ToAutomaton(determinizeWorkLimit int, options ...ToAutomatonOptions) (*Automaton, error) {
+	opts := &toAutomatonOptions{
+		automata:          nil,
+		automatonProvider: nil,
+	}
+	for _, fn := range options {
+		fn(opts)
+	}
+	return r.toAutomatonInternal(opts.automata, opts.automatonProvider, determinizeWorkLimit)
+}
 
 func (r *RegExp) toAutomatonInternal(automata map[string]*Automaton,
 	automatonProvider Provider, determinizeWorkLimit int) (*Automaton, error) {

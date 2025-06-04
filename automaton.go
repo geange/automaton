@@ -2,7 +2,6 @@ package automaton
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 
 	"github.com/bits-and-blooms/bitset"
@@ -154,7 +153,7 @@ func (a *Automaton) Copy(other *Automaton) {
 
 	// Bulk copy and then fixup the state pointers:
 	stateOffset := a.GetNumStates()
-	a.states = slices.Grow(a.states, a.nextState+other.nextState)
+	a.states = grow(a.states, a.nextState+other.nextState)
 	copy(a.states[a.nextState:a.nextState+other.nextState], other.states)
 	for i := 0; i < other.nextState; i += 2 {
 		if a.states[a.nextState+i] != -1 {
@@ -167,9 +166,10 @@ func (a *Automaton) Copy(other *Automaton) {
 	otherAcceptStates := other.getAcceptStates()
 	state := uint(0)
 
+	var ok bool
 	for {
 		if state < uint(otherNumStates) {
-			if state, ok := otherAcceptStates.NextSet(state); ok {
+			if state, ok = otherAcceptStates.NextSet(state); ok {
 				a.SetAccept(stateOffset+int(state), true)
 				state++
 				continue
@@ -180,7 +180,7 @@ func (a *Automaton) Copy(other *Automaton) {
 	}
 
 	// Bulk copy and then fixup dest for each transition:
-	a.transitions = slices.Grow(a.transitions, a.nextTransition+other.nextTransition)
+	a.transitions = grow(a.transitions, a.nextTransition+other.nextTransition)
 	copy(a.transitions[a.nextTransition:a.nextTransition+other.nextTransition], other.transitions)
 	for i := 0; i < other.nextTransition; i += 3 {
 		a.transitions[a.nextTransition+i] += stateOffset
@@ -313,13 +313,13 @@ func (a *Automaton) GetNumTransitionsWithState(state int) int {
 
 func (a *Automaton) growStates() {
 	if a.nextState+2 > len(a.states) {
-		a.states = slices.Grow(a.states, a.nextState+2)
+		a.states = grow(a.states, a.nextState+2)
 	}
 }
 
 func (a *Automaton) growTransitions() {
 	if a.nextTransition+3 > len(a.transitions) {
-		a.transitions = slices.Grow(a.transitions, a.nextTransition+3)
+		a.transitions = grow(a.transitions, a.nextTransition+3)
 	}
 }
 

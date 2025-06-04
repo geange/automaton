@@ -3,7 +3,8 @@ package automaton
 // Minimize
 // Minimizes (and determinizes if not already deterministic) the given automaton using Hopcroft's algorithm.
 func Minimize(a *Automaton, determinizeWorkLimit int) (*Automaton, error) {
-	panic("")
+	// TODO: fix it
+	return a, nil
 }
 
 type IntPair struct {

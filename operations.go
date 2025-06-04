@@ -335,7 +335,57 @@ func reverse(a *Automaton) (*Automaton, error) {
 }
 
 func reverseStates(a *Automaton, initialStates map[int]struct{}) (*Automaton, error) {
-	panic("")
+
+	if isEmpty(a) {
+		return NewAutomaton(), nil
+	}
+
+	numStates := a.GetNumStates()
+
+	// Build a new automaton with all edges reversed
+	builder := NewBuilder()
+
+	// Initial node; we'll add epsilon transitions in the end:
+	builder.CreateState()
+
+	for s := 0; s < numStates; s++ {
+		builder.CreateState()
+	}
+
+	// Old initial state becomes new accept state:
+	builder.SetAccept(1, true)
+
+	t := NewTransition()
+	for s := 0; s < numStates; s++ {
+		numTransitions := a.GetNumTransitionsWithState(s)
+		a.InitTransition(s, t)
+		for i := 0; i < numTransitions; i++ {
+			a.GetNextTransition(t)
+			builder.AddTransition(t.Dest+1, s+1, t.Min, t.Max)
+		}
+	}
+
+	result := builder.Finish()
+
+	s := uint(0)
+	var ok bool
+	acceptStates := a.getAcceptStates()
+	for int(s) < numStates {
+		s, ok = acceptStates.NextSet(s)
+		if !ok {
+			break
+		}
+
+		result.AddEpsilon(0, int(s+1))
+		if initialStates != nil {
+			initialStates[int(s+1)] = struct{}{}
+		}
+		s++
+	}
+
+	result.FinishState()
+
+	return result, nil
 }
 
 func reverseAutomaton(a *Automaton) *Automaton {
@@ -398,6 +448,7 @@ func getLiveStatesFromInitial(a *Automaton) *bitset.BitSet {
 	t := NewTransition()
 	for len(workList) == 0 {
 		s := workList[0]
+		workList = workList[1:]
 		count := a.InitTransition(s, t)
 		for i := 0; i < count; i++ {
 			a.GetNextTransition(t)
@@ -412,7 +463,53 @@ func getLiveStatesFromInitial(a *Automaton) *bitset.BitSet {
 }
 
 func getLiveStatesToAccept(a *Automaton) *bitset.BitSet {
-	panic("")
+	builder := NewBuilder()
+
+	// NOTE: not quite the same thing as what SpecialOperations.reverse does:
+	t := NewTransition()
+	numStates := a.GetNumStates()
+	for s := 0; s < numStates; s++ {
+		builder.CreateState()
+	}
+	for s := 0; s < numStates; s++ {
+		count := a.InitTransition(s, t)
+		for i := 0; i < count; i++ {
+			a.GetNextTransition(t)
+			builder.AddTransition(t.Dest, s, t.Min, t.Max)
+		}
+	}
+	a2 := builder.Finish()
+
+	workList := make([]int, 0)
+	live := bitset.New(uint(numStates))
+	acceptBits := a.getAcceptStates()
+	s := uint(0)
+	ok := false
+	for int(s) < numStates {
+		s, ok = acceptBits.NextSet(s)
+		if !ok {
+			break
+		}
+
+		live.Set(s)
+		workList = append(workList, int(s))
+		s++
+	}
+
+	for len(workList) == 0 {
+		s := workList[0]
+		workList = workList[1:]
+		count := a2.InitTransition(s, t)
+		for i := 0; i < count; i++ {
+			a2.GetNextTransition(t)
+			if live.Test(uint(t.Dest)) == false {
+				live.Set(uint(t.Dest))
+				workList = append(workList, t.Dest)
+			}
+		}
+	}
+
+	return live
 }
 
 func reverseAutomatonIntSet(a *Automaton, initialStates map[int]struct{}) *Automaton {
@@ -642,7 +739,231 @@ func complement(a *Automaton, determinizeWorkLimit int) (*Automaton, error) {
 }
 
 func determinize(a *Automaton, workLimit int) (*Automaton, error) {
-	panic("")
+	if a.IsDeterministic() {
+		// Already determinized
+		return a, nil
+	}
+	if a.GetNumStates() <= 1 {
+		// Already determinized
+		return a, nil
+	}
+
+	// subset construction
+	b := NewBuilder()
+
+	//System.out.println("DET:");
+	//a.writeDot("/l/la/lucene/core/detin.dot");
+
+	// Same initial values and state will always have the same hashCode
+	initialset := NewFrozenIntSet([]int{0}, mix(0)+1, 0)
+
+	// Create state 0:
+	b.CreateState()
+
+	worklist := make([]*FrozenIntSet, 0)
+	newstate := NewHashMap[int]()
+
+	worklist = append(worklist, initialset)
+
+	b.SetAccept(0, a.IsAccept(0))
+	newstate.Set(initialset, 0)
+
+	// like Set<Integer,PointTransitions>
+	points := NewPointTransitionSet()
+
+	// like HashMap<Integer,Integer>, maps state to its count
+	statesSet := NewStateSet()
+
+	t := NewTransition()
+
+	effortSpent := 0
+
+	// LUCENE-9981: approximate conversion from what used to be a limit on number of states, to
+	// maximum "effort":
+	effortLimit := workLimit * 10
+
+	for len(worklist) > 0 {
+		// TODO (LUCENE-9983): these int sets really do not need to be sorted, and we are paying
+		// a high (unecessary) price for that!  really we just need a low-overhead Map<int,int>
+		// that implements equals/hash based only on the keys (ignores the values).  fixing this
+		// might be a bigspeedup for determinizing complex automata
+		s := worklist[0]
+		worklist = worklist[1:]
+
+		// LUCENE-9981: we more carefully aggregate the net work this automaton is costing us, instead
+		// of (overly simplistically) counting number
+		// of determinized states:
+		effortSpent += len(s.values)
+		if effortSpent >= effortLimit {
+			return nil, errors.New("too Complex To Determinize")
+		}
+
+		// Collate all outgoing transitions by min/1+max:
+		for i := 0; i < len(s.values); i++ {
+			s0 := s.values[i]
+			numTransitions := a.GetNumTransitionsWithState(s0)
+			a.InitTransition(s0, t)
+			for j := 0; j < numTransitions; j++ {
+				a.GetNextTransition(t)
+				points.Add(t)
+			}
+		}
+
+		if points.count == 0 {
+			// No outgoing transitions -- skip it
+			continue
+		}
+
+		points.Sort()
+
+		lastPoint := -1
+		accCount := 0
+
+		r := s.state
+
+		for i := 0; i < points.count; i++ {
+
+			point := points.points[i].point
+
+			if statesSet.Size() > 0 {
+
+				q, ok := newstate.Get(statesSet)
+				if !ok {
+					q = b.CreateState()
+					p := statesSet.Freeze(q)
+					//System.out.println("  make new state=" + q + " -> " + p + " accCount=" + accCount);
+					worklist = append(worklist, p)
+					b.SetAccept(q, accCount > 0)
+					newstate.Set(p, q)
+				}
+
+				// System.out.println("  add trans src=" + r + " dest=" + q + " min=" + lastPoint + " max=" + (point-1));
+
+				b.AddTransition(r, q, lastPoint, point-1)
+			}
+
+			// process transitions that end on this point
+			// (closes an overlapping interval)
+			transitions := points.points[i].ends.transitions
+			limit := points.points[i].ends.next
+			for j := 0; j < limit; j += 3 {
+				dest := transitions[j]
+				statesSet.Decr(dest)
+				if a.IsAccept(dest) {
+					accCount--
+				}
+				//accCount -= a.isAccept(dest) ? 1:0;
+			}
+			points.points[i].ends.next = 0
+
+			// process transitions that start on this point
+			// (opens a new interval)
+			transitions = points.points[i].starts.transitions
+			limit = points.points[i].starts.next
+			for j := 0; j < limit; j += 3 {
+				dest := transitions[j]
+				statesSet.Incr(dest)
+				if a.IsAccept(dest) {
+					accCount++
+				}
+			}
+			lastPoint = point
+			points.points[i].starts.next = 0
+		}
+		points.Reset()
+	}
+
+	result := b.Finish()
+	return result, nil
+}
+
+type TransitionList struct {
+	transitions []int
+	next        int
+}
+
+func (t *TransitionList) reset() {
+	t.next = 0
+	t.transitions = t.transitions[:0]
+}
+
+func NewTransitionList() *TransitionList {
+	return &TransitionList{
+		transitions: make([]int, 0),
+	}
+}
+
+func (t *TransitionList) Add(item *Transition) {
+	t.transitions = append(t.transitions, item.Dest, item.Min, item.Max)
+	t.next += 3
+}
+
+type PointTransitions struct {
+	point  int
+	ends   *TransitionList
+	starts *TransitionList
+}
+
+func NewPointTransitions() *PointTransitions {
+	return &PointTransitions{
+		starts: NewTransitionList(),
+		ends:   NewTransitionList(),
+	}
+}
+
+func (p *PointTransitions) reset(point int) {
+	p.point = point
+	p.ends.transitions = p.ends.transitions[:]
+}
+
+type PointTransitionSet struct {
+	count  int
+	points []*PointTransitions
+	imap   map[int]*PointTransitions
+}
+
+func (s *PointTransitionSet) find(point int) *PointTransitions {
+	p, ok := s.imap[point]
+	if !ok {
+		p = s.next(point)
+		s.imap[point] = p
+	}
+	return p
+}
+
+func (s *PointTransitionSet) next(point int) *PointTransitions {
+	points0 := NewPointTransitions()
+	s.points = append(s.points, points0)
+	points0.reset(point)
+	return points0
+}
+
+func (s *PointTransitionSet) Add(t *Transition) {
+	s.find(t.Min).starts.Add(t)
+	s.find(1 + t.Max).ends.Add(t)
+}
+
+func (s *PointTransitionSet) Sort() {
+	slices.SortStableFunc(s.points, func(e, e2 *PointTransitions) int {
+		if e.point < e2.point {
+			return -1
+		} else if e.point == e2.point {
+			return 0
+		}
+		return 1
+	})
+}
+
+func (s *PointTransitionSet) Reset() {
+	clear(s.imap)
+	s.count = 0
+}
+
+func NewPointTransitionSet() *PointTransitionSet {
+	return &PointTransitionSet{
+		points: make([]*PointTransitions, 0),
+		imap:   make(map[int]*PointTransitions),
+	}
 }
 
 func repeat(a *Automaton) (*Automaton, error) {
@@ -751,10 +1072,110 @@ func toSet(a *Automaton, offset int) map[int]struct{} {
 	return result
 }
 
+var _ Hashable = &statePair{}
+
+type statePair struct {
+	s  int
+	s1 int
+	s2 int
+}
+
+func newStatePair(s int, s1 int, s2 int) *statePair {
+	return &statePair{s: s, s1: s1, s2: s2}
+}
+
+func (s *statePair) Hash() uint64 {
+	return uint64(s.s1*31 + s.s2)
+}
+
+func (s *statePair) Equals(other Hashable) bool {
+	sp, ok := other.(*statePair)
+	if !ok {
+		return false
+	}
+	return s.s1 == sp.s1 && s.s2 == sp.s2
+}
+
 func intersection(a1, a2 *Automaton) (*Automaton, error) {
-	panic("")
+	if a1 == a2 {
+		return a1, nil
+	}
+	if a1.GetNumStates() == 0 {
+		return a1, nil
+	}
+	if a2.GetNumStates() == 0 {
+		return a2, nil
+	}
+	transitions1 := a1.getSortedTransitions()
+	transitions2 := a2.getSortedTransitions()
+	c := NewAutomaton()
+	c.CreateState()
+	worklist := make([]*statePair, 0)
+	estates := NewHashMap[*statePair]()
+
+	p := newStatePair(0, 0, 0)
+	worklist = append(worklist, p)
+	estates.Set(p, p)
+	for len(worklist) > 0 {
+		p = worklist[0]
+		worklist = worklist[1:]
+		c.SetAccept(p.s, a1.IsAccept(p.s1) && a2.IsAccept(p.s2))
+		t1 := transitions1[p.s1]
+		t2 := transitions2[p.s2]
+		n1 := 0
+		b2 := 0
+		for ; n1 < len(t1); n1++ {
+			for b2 < len(t2) && t2[b2].Max < t1[n1].Min {
+				b2++
+			}
+
+			n2 := b2
+			for ; n2 < len(t2) && t1[n1].Max >= t2[n2].Min; n2++ {
+
+			}
+			if t2[n2].Max >= t1[n1].Min {
+				q := newStatePair(-1, t1[n1].Dest, t2[n2].Dest)
+				r, ok := estates.Get(q)
+				if !ok {
+					q.s = c.CreateState()
+					worklist = append(worklist, q)
+					estates.Set(q, q)
+					r = q
+				}
+				var minI, maxI int
+
+				if t1[n1].Min > t2[n2].Min {
+					minI = t1[n1].Min
+				} else {
+					minI = t2[n2].Min
+				}
+
+				if t1[n1].Max < t2[n2].Max {
+					maxI = t1[n1].Max
+				} else {
+					maxI = t2[n2].Max
+				}
+
+				err := c.AddTransition(p.s, r.s, minI, maxI)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	c.FinishState()
+
+	return removeDeadStates(c)
 }
 
 func optional(a *Automaton) (*Automaton, error) {
-	panic("")
+	result := NewAutomaton()
+	result.CreateState()
+	result.SetAccept(0, true)
+	if a.GetNumStates() > 0 {
+		result.Copy(a)
+		result.AddEpsilon(0, 1)
+	}
+	result.FinishState()
+	return result, nil
 }
