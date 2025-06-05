@@ -1,7 +1,5 @@
 package automaton
 
-import "slices"
-
 var _ IntSet = &FrozenIntSet{}
 
 type FrozenIntSet struct {
@@ -15,30 +13,35 @@ func (f *FrozenIntSet) Hash() uint64 {
 }
 
 func (f *FrozenIntSet) Equals(other Hashable) bool {
-	if other == nil {
-		if f == nil {
-			return true
-		}
-		return false
-	}
-
-	fs, ok := other.(*FrozenIntSet)
+	//if other == nil {
+	//	if f == nil {
+	//		return true
+	//	}
+	//	return false
+	//}
+	//
+	//fs, ok := other.(*FrozenIntSet)
+	//if !ok {
+	//	return false
+	//}
+	//
+	//if fs == nil {
+	//	if f == nil {
+	//		return true
+	//	}
+	//	return false
+	//}
+	//
+	//if !slices.Equal(f.values, fs.values) {
+	//	return false
+	//}
+	//
+	//return f.state == fs.state && f.hashCode == fs.hashCode
+	iset, ok := other.(IntSet)
 	if !ok {
 		return false
 	}
-
-	if fs == nil {
-		if f == nil {
-			return true
-		}
-		return false
-	}
-
-	if !slices.Equal(f.values, fs.values) {
-		return false
-	}
-
-	return f.state == fs.state && f.hashCode == fs.hashCode
+	return iset.Hash() == f.Hash()
 }
 
 func NewFrozenIntSet(values []int, state int, hashCode uint64) *FrozenIntSet {

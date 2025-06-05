@@ -199,22 +199,12 @@ func getCommonSuffixBytesRef(a *Automaton) ([]byte, error) {
 	return ref, nil
 }
 
-//func reverse[T cmp.Ordered](ref []T) {
-//	i, j := 0, len(ref)-1
-//	for i < j {
-//		ref[i], ref[j] = ref[j], ref[i]
-//	}
-//}
-
-func BitsetAndNot(a, b *bitset.BitSet) {
-
-}
-
+// Returns true if there are dead states reachable from an initial state.
 func hasDeadStatesFromInitial(a *Automaton) bool {
 	reachableFromInitial := getLiveStatesFromInitial(a)
 	reachableFromAccept := getLiveStatesToAccept(a)
-	reachableFromInitial.Difference(reachableFromAccept)
-	return reachableFromInitial.Count() == 0
+	reachableFromInitial = reachableFromInitial.Difference(reachableFromAccept)
+	return reachableFromInitial.Count() > 0
 }
 
 func getCommonPrefix(a *Automaton) (string, error) {
@@ -254,11 +244,11 @@ OUT:
 				// mark target state for next iteration
 				next.Set(uint(scratch.Dest))
 			}
-			state++
-			if state >= current.Len() {
+
+			if state+1 >= current.Len() {
 				ok = false
 			} else {
-				current.Set(state)
+				state, ok = current.NextSet(state + 1)
 			}
 		}
 
@@ -446,7 +436,7 @@ func getLiveStatesFromInitial(a *Automaton) *bitset.BitSet {
 	workList = append(workList, 0)
 
 	t := NewTransition()
-	for len(workList) == 0 {
+	for len(workList) > 0 {
 		s := workList[0]
 		workList = workList[1:]
 		count := a.InitTransition(s, t)
@@ -496,10 +486,10 @@ func getLiveStatesToAccept(a *Automaton) *bitset.BitSet {
 		s++
 	}
 
-	for len(workList) == 0 {
-		s := workList[0]
+	for len(workList) > 0 {
+		state := workList[0]
 		workList = workList[1:]
-		count := a2.InitTransition(s, t)
+		count := a2.InitTransition(state, t)
 		for i := 0; i < count; i++ {
 			a2.GetNextTransition(t)
 			if live.Test(uint(t.Dest)) == false {
@@ -935,6 +925,7 @@ func (s *PointTransitionSet) next(point int) *PointTransitions {
 	points0 := NewPointTransitions()
 	s.points = append(s.points, points0)
 	points0.reset(point)
+	s.count++
 	return points0
 }
 

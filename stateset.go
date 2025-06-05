@@ -31,8 +31,11 @@ func (s *StateSet) Hash() uint64 {
 }
 
 func (s *StateSet) Equals(other Hashable) bool {
-	//TODO implement me
-	panic("implement me")
+	iset, ok := other.(IntSet)
+	if !ok {
+		return false
+	}
+	return s.Hash() == iset.Hash()
 }
 
 func (s *StateSet) GetArray() []int {
