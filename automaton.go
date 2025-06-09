@@ -17,7 +17,7 @@ import (
 type Automaton struct {
 	// Where we next write to the int[] states; this increments by 2 for each added state because we
 	// pack a pointer to the transitions array and a count of how many transitions leave the state.
-	nextState int
+	//nextState int
 
 	// Where we next write to in int[] transitions; this increments by 3 for each added transition because
 	// we pack min, max, dest in sequence.
@@ -48,19 +48,21 @@ func NewAutomatonV1(numStates, numTransitions int) *Automaton {
 	return &Automaton{
 		curState:      -1,
 		deterministic: true,
-		states:        make([]int, numStates*2),
+		states:        make([]int, 0, numStates*2),
 		isAccept:      bitset.New(uint(numStates)),
-		transitions:   make([]int, numTransitions*3),
+		transitions:   make([]int, 0, numTransitions*3),
 	}
 }
 
 // CreateState Create a new state.
 func (a *Automaton) CreateState() int {
-	a.growStates()
-	state := a.nextState / 2
-	a.states[a.nextState] = -1
-	a.nextState += 2
+	state := len(a.states)
+	a.states = append(a.states, -1, 0)
 	return state
+	//state := a.nextState / 2
+	//a.states[a.nextState] = -1
+	//a.nextState += 2
+	//return state
 }
 
 // SetAccept Set or clear this state as an accept state.
@@ -153,15 +155,16 @@ func (a *Automaton) Copy(other *Automaton) {
 
 	// Bulk copy and then fixup the state pointers:
 	stateOffset := a.GetNumStates()
-	a.states = grow(a.states, a.nextState+other.nextState)
-	copy(a.states[a.nextState:a.nextState+other.nextState], other.states)
-	for i := 0; i < other.nextState; i += 2 {
-		if a.states[a.nextState+i] != -1 {
-			a.states[a.nextState+i] += a.nextTransition
-		}
+
+	nextTransition := len(a.transitions)
+	nextState := len(a.states)
+
+	a.states = append(a.states, other.states...)
+	for i := nextState; i < len(a.states); i += 2 {
+		a.states[i] += nextTransition
 	}
 
-	a.nextState += other.nextState
+	//a.nextState += other.nextState
 	otherNumStates := other.GetNumStates()
 	otherAcceptStates := other.getAcceptStates()
 	state := uint(0)
@@ -294,7 +297,7 @@ func (a *Automaton) FinishState() {
 
 // GetNumStates How many states this automaton has.
 func (a *Automaton) GetNumStates() int {
-	return a.nextState / 2
+	return len(a.states) / 2
 }
 
 // GetNumTransitions How many transitions this automaton has.
@@ -311,11 +314,11 @@ func (a *Automaton) GetNumTransitionsWithState(state int) int {
 	return count
 }
 
-func (a *Automaton) growStates() {
-	if a.nextState+2 > len(a.states) {
-		a.states = grow(a.states, a.nextState+2)
-	}
-}
+//func (a *Automaton) growStates() {
+//	if a.nextState+2 > len(a.states) {
+//		a.states = grow(a.states, a.nextState+2)
+//	}
+//}
 
 func (a *Automaton) growTransitions() {
 	if a.nextTransition+3 > len(a.transitions) {
@@ -501,22 +504,22 @@ func (a *Automaton) getTransition(state, index int, t *Transition) {
 	i++
 }
 
-// Returns sorted array of all interval start points.
+// GetStartPoints Returns sorted array of all interval start points.
 func (a *Automaton) GetStartPoints() []int {
 	pointset := make(map[int]struct{})
 	pointset[0] = struct{}{}
 
-	for s := 0; s < a.nextState; s += 2 {
+	for s := 0; s < len(a.states); s += 2 {
 		trans := a.states[s]
 		limit := trans + 3*a.states[s+1]
 		//System.out.println("  state=" + (s/2) + " trans=" + trans + " limit=" + limit);
 		for trans < limit {
-			min := a.transitions[trans+1]
-			max := a.transitions[trans+2]
+			minTrans := a.transitions[trans+1]
+			maxTrans := a.transitions[trans+2]
 			//System.out.println("    min=" + min);
-			pointset[min] = struct{}{}
-			if max < 0x10FFFF {
-				pointset[max+1] = struct{}{}
+			pointset[minTrans] = struct{}{}
+			if maxTrans < 0x10FFFF {
+				pointset[maxTrans+1] = struct{}{}
 			}
 			trans += 3
 		}
