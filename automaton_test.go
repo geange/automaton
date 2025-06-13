@@ -37,9 +37,13 @@ func Test_getCommonPrefix(t *testing.T) {
 
 	t.Run("testCommonPrefixTrailingKleenStar", func(t *testing.T) {
 		a1, err := defaultAutomata.MakeString("foo")
-		assert.Nil(t, err)
+		if !assert.Nil(t, err) {
+			return
+		}
 		a2, err := defaultAutomata.MakeAnyString()
-		assert.Nil(t, err)
+		if !assert.Nil(t, err) {
+			return
+		}
 		a, err := concatenate(a1, a2)
 		assert.Nil(t, err)
 		prefix, err := getCommonPrefix(a)

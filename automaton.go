@@ -21,7 +21,7 @@ type Automaton struct {
 
 	// Where we next write to in int[] transitions; this increments by 3 for each added transition because
 	// we pack min, max, dest in sequence.
-	nextTransition int
+	//nextTransition int
 
 	// Current state we are adding transitions to; the caller must add all transitions for this state
 	// before moving onto another state.
@@ -56,7 +56,7 @@ func NewAutomatonV1(numStates, numTransitions int) *Automaton {
 
 // CreateState Create a new state.
 func (a *Automaton) CreateState() int {
-	state := len(a.states)
+	state := len(a.states) / 2
 	a.states = append(a.states, -1, 0)
 	return state
 	//state := a.nextState / 2
@@ -106,9 +106,6 @@ func (a *Automaton) AddTransitionLabel(source, dest, label int) error {
 
 // AddTransition Add a new transition with the specified source, dest, min, max.
 func (a *Automaton) AddTransition(source, dest, min, max int) error {
-	//bounds := a.nextState / 2
-
-	a.growTransitions()
 	if a.curState != source {
 		if a.curState != -1 {
 			a.finishCurrentState()
@@ -119,15 +116,17 @@ func (a *Automaton) AddTransition(source, dest, min, max int) error {
 		if a.states[2*a.curState] != -1 {
 			return fmt.Errorf("from state (%d) already had transitions added", source)
 		}
-		a.states[2*a.curState] = a.nextTransition
+		a.states[2*a.curState] = len(a.transitions)
 	}
 
-	a.transitions[a.nextTransition] = dest
-	a.nextTransition++
-	a.transitions[a.nextTransition] = min
-	a.nextTransition++
-	a.transitions[a.nextTransition] = max
-	a.nextTransition++
+	a.transitions = append(a.transitions, dest, min, max)
+
+	//a.transitions[a.nextTransition] = dest
+	//a.nextTransition++
+	//a.transitions[a.nextTransition] = min
+	//a.nextTransition++
+	//a.transitions[a.nextTransition] = max
+	//a.nextTransition++
 
 	// Increment transition count for this state
 	a.states[2*a.curState+1]++
@@ -183,12 +182,14 @@ func (a *Automaton) Copy(other *Automaton) {
 	}
 
 	// Bulk copy and then fixup dest for each transition:
-	a.transitions = grow(a.transitions, a.nextTransition+other.nextTransition)
-	copy(a.transitions[a.nextTransition:a.nextTransition+other.nextTransition], other.transitions)
-	for i := 0; i < other.nextTransition; i += 3 {
-		a.transitions[a.nextTransition+i] += stateOffset
+	//a.transitions = grow(a.transitions, a.nextTransition+other.nextTransition)
+	//nextTransition := len(a.transitions)
+	a.transitions = append(a.transitions, other.transitions...)
+	//copy(a.transitions[a.nextTransition:a.nextTransition+other.nextTransition], other.transitions)
+	for i := 0; i < len(other.transitions); i += 3 {
+		a.transitions[nextTransition+i] += stateOffset
 	}
-	a.nextTransition += other.nextTransition
+	//a.nextTransition += other.nextTransition
 
 	if other.deterministic == false {
 		a.deterministic = false
@@ -196,16 +197,23 @@ func (a *Automaton) Copy(other *Automaton) {
 }
 
 // Freezes the last state, sorting and reducing the transitions.
+// 该函数finishCurrentState()的作用是整理当前状态的转移表，合并相邻区间并判断是否为确定性状态转移**。具体功能如下：
+// 1. 排序转移项：根据目标状态和字符范围对转移进行排序；
+// 2. 合并相邻区间：遍历所有转移，将相同目标状态且连续或相邻的字符区间合并；
+// 3. 更新转移数量：减少冗余转移，更新实际有效转移数目；
+// 4. 再次排序：按字符范围排序以提高匹配效率；
+// 5. 检查确定性：若多个转移存在重叠输入范围，则标记为非确定性（deterministic = false）。
 func (a *Automaton) finishCurrentState() {
 	numTransitions := a.states[2*a.curState+1]
-
 	offset := a.states[2*a.curState]
+
 	start := offset / 3
 
+	//根据目标状态和字符范围对转移进行排序
 	sort.Sort(&destMinMaxSorter{
+		Automaton: a,
 		from:      start,
 		to:        start + numTransitions,
-		Automaton: a,
 	})
 
 	// Reduce any "adjacent" transitions:
@@ -215,9 +223,10 @@ func (a *Automaton) finishCurrentState() {
 	dest := -1
 
 	for i := 0; i < numTransitions; i++ {
-		tDest := a.transitions[offset+3*i]
-		tMin := a.transitions[offset+3*i+1]
-		tMax := a.transitions[offset+3*i+2]
+		idx := offset + 3*i
+		tDest := a.transitions[idx]
+		tMin := a.transitions[idx+1]
+		tMax := a.transitions[idx+2]
 
 		if dest == tDest {
 			if tMin <= maxValue+1 {
@@ -226,9 +235,10 @@ func (a *Automaton) finishCurrentState() {
 				}
 			} else {
 				if dest != -1 {
-					a.transitions[offset+3*upto] = dest
-					a.transitions[offset+3*upto+1] = minValue
-					a.transitions[offset+3*upto+2] = maxValue
+					uptoIdx := offset + 3*upto
+					a.transitions[uptoIdx] = dest
+					a.transitions[uptoIdx+1] = minValue
+					a.transitions[uptoIdx+2] = maxValue
 					upto++
 				}
 				minValue = tMin
@@ -236,9 +246,10 @@ func (a *Automaton) finishCurrentState() {
 			}
 		} else {
 			if dest != -1 {
-				a.transitions[offset+3*upto] = dest
-				a.transitions[offset+3*upto+1] = minValue
-				a.transitions[offset+3*upto+2] = maxValue
+				uptoIdx := offset + 3*upto
+				a.transitions[uptoIdx] = dest
+				a.transitions[uptoIdx+1] = minValue
+				a.transitions[uptoIdx+2] = maxValue
 				upto++
 			}
 			dest = tDest
@@ -249,31 +260,36 @@ func (a *Automaton) finishCurrentState() {
 
 	if dest != -1 {
 		// Last transition
-		a.transitions[offset+3*upto] = dest
-		a.transitions[offset+3*upto+1] = minValue
-		a.transitions[offset+3*upto+2] = maxValue
+		uptoIndex := offset + 3*upto
+		a.transitions[uptoIndex] = dest
+		a.transitions[uptoIndex+1] = minValue
+		a.transitions[uptoIndex+2] = maxValue
 		upto++
 	}
 
-	a.nextTransition -= (numTransitions - upto) * 3
-	a.states[2*a.curState+1] = upto
+	newTransitionsSize := len(a.transitions) - (numTransitions-upto)*3
+	a.transitions = a.transitions[:newTransitionsSize]
+	//
+	//a.nextTransition -= (numTransitions - upto) * 3
+	//a.states[2*a.curState+1] = upto
 
 	// Sort transitions by minValue/maxValue/dest:
 	sort.Sort(&minMaxDestSorter{
+		Automaton: a,
 		from:      start,
 		to:        start + upto,
-		Automaton: a,
 	})
 
 	if a.deterministic && upto > 1 {
 		lastMax := a.transitions[offset+2]
 		for i := 1; i < upto; i++ {
-			minValue = a.transitions[offset+3*i+1]
+			i3 := 3 * i
+			minValue = a.transitions[offset+i3+1]
 			if minValue <= lastMax {
 				a.deterministic = false
 				break
 			}
-			lastMax = a.transitions[offset+3*i+2]
+			lastMax = a.transitions[offset+i3+2]
 		}
 	}
 }
@@ -302,12 +318,16 @@ func (a *Automaton) GetNumStates() int {
 
 // GetNumTransitions How many transitions this automaton has.
 func (a *Automaton) GetNumTransitions() int {
-	return a.nextTransition / 3
+	return len(a.transitions) / 3
 }
 
 // GetNumTransitionsWithState How many transitions this state has.
 func (a *Automaton) GetNumTransitionsWithState(state int) int {
-	count := a.states[2*state+1]
+	idx := 2*state + 1
+	if len(a.states) <= idx {
+		return 0
+	}
+	count := a.states[idx]
 	if count == -1 {
 		return 0
 	}
@@ -320,16 +340,17 @@ func (a *Automaton) GetNumTransitionsWithState(state int) int {
 //	}
 //}
 
-func (a *Automaton) growTransitions() {
-	if a.nextTransition+3 > len(a.transitions) {
-		a.transitions = grow(a.transitions, a.nextTransition+3)
-	}
-}
+//func (a *Automaton) growTransitions() {
+//	if a.nextTransition+3 > len(a.transitions) {
+//		a.transitions = grow(a.transitions, a.nextTransition+3)
+//	}
+//}
 
 // Sorts transitions by dest, ascending, then min label ascending, then max label ascending
 type destMinMaxSorter struct {
-	from, to int
 	*Automaton
+
+	from, to int
 }
 
 func (r *destMinMaxSorter) Len() int {

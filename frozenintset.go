@@ -13,30 +13,23 @@ func (f *FrozenIntSet) Hash() uint64 {
 }
 
 func (f *FrozenIntSet) Equals(other Hashable) bool {
-	//if other == nil {
-	//	if f == nil {
-	//		return true
-	//	}
-	//	return false
-	//}
-	//
-	//fs, ok := other.(*FrozenIntSet)
-	//if !ok {
-	//	return false
-	//}
-	//
-	//if fs == nil {
-	//	if f == nil {
-	//		return true
-	//	}
-	//	return false
-	//}
-	//
-	//if !slices.Equal(f.values, fs.values) {
-	//	return false
-	//}
-	//
-	//return f.state == fs.state && f.hashCode == fs.hashCode
+	if f == nil {
+		switch other.(type) {
+		case *FrozenIntSet:
+			ptr := other.(*FrozenIntSet)
+			if ptr == nil {
+				return true
+			}
+		case *StateSet:
+			ptr := other.(*StateSet)
+			if ptr == nil {
+				return true
+			}
+		default:
+			return false
+		}
+	}
+
 	iset, ok := other.(IntSet)
 	if !ok {
 		return false
