@@ -358,8 +358,8 @@ func (r *destMinMaxSorter) Len() int {
 }
 
 func (r *destMinMaxSorter) Less(i, j int) bool {
-	iStart := 3 * i
-	jStart := 3 * j
+	iStart := 3 * (i + r.from)
+	jStart := 3 * (j + r.from)
 
 	iDest := r.transitions[iStart]
 	jDest := r.transitions[jStart]
@@ -393,7 +393,7 @@ func (r *destMinMaxSorter) Less(i, j int) bool {
 }
 
 func (r *destMinMaxSorter) Swap(i, j int) {
-	iStart, jStart := 3*i, 3*j
+	iStart, jStart := 3*(i+r.from), 3*(j+r.from)
 	r.swapOne(iStart, jStart)
 	r.swapOne(iStart+1, jStart+1)
 	r.swapOne(iStart+2, jStart+2)
@@ -415,8 +415,8 @@ func (r *minMaxDestSorter) Len() int {
 }
 
 func (r *minMaxDestSorter) Less(i, j int) bool {
-	iStart := 3 * i
-	jStart := 3 * j
+	iStart := 3 * (i + r.from)
+	jStart := 3 * (j + r.from)
 
 	// First min:
 	iMin := r.transitions[iStart+1]
@@ -449,7 +449,7 @@ func (r *minMaxDestSorter) Less(i, j int) bool {
 }
 
 func (r *minMaxDestSorter) Swap(i, j int) {
-	iStart, jStart := 3*i, 3*j
+	iStart, jStart := 3*(i+r.from), 3*(j+r.from)
 	r.swapOne(iStart, jStart)
 	r.swapOne(iStart+1, jStart+1)
 	r.swapOne(iStart+2, jStart+2)

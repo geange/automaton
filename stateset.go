@@ -20,11 +20,14 @@ func (s *StateSet) Hash() uint64 {
 	if s.hashUpdated {
 		return s.hashCode
 	}
-	s.hashCode = uint64(len(s.inner))
 
 	s.hashCode = uint64(len(s.inner))
+	keys := make([]int, 0)
 	for k := range s.inner {
-		s.hashCode += uint64(mix(k))
+		keys = append(keys, k)
+	}
+	for _, key := range keys {
+		s.hashCode += uint64(mix(key))
 	}
 	s.hashUpdated = true
 	return s.hashCode
@@ -68,13 +71,14 @@ func (s *StateSet) Decr(state int) {
 	if !ok {
 		return
 	}
-	if count == 0 {
+	if count == 1 {
 		delete(s.inner, state)
+		s.keyChanged()
 	} else {
 		s.inner[state]--
 	}
 }
 
 func (s *StateSet) Freeze(state int) *FrozenIntSet {
-	return NewFrozenIntSet(s.GetArray(), state, s.hashCode)
+	return NewFrozenIntSet(s.GetArray(), s.hashCode, state)
 }

@@ -46,7 +46,7 @@ func TestNewFrozenIntSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewFrozenIntSet(tt.values, tt.state, uint64(tt.hashCode))
+			got := NewFrozenIntSet(tt.values, uint64(tt.hashCode), tt.state)
 			if !reflect.DeepEqual(got.GetArray(), tt.wantValues) {
 				t.Errorf("Values mismatch: got %v, want %v", got.GetArray(), tt.wantValues)
 			}

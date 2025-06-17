@@ -37,7 +37,7 @@ func (f *FrozenIntSet) Equals(other Hashable) bool {
 	return iset.Hash() == f.Hash()
 }
 
-func NewFrozenIntSet(values []int, state int, hashCode uint64) *FrozenIntSet {
+func NewFrozenIntSet(values []int, hashCode uint64, state int) *FrozenIntSet {
 	return &FrozenIntSet{values: values, state: state, hashCode: hashCode}
 }
 

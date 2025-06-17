@@ -2,12 +2,17 @@ package automaton
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"slices"
 	"sync/atomic"
 	"unicode"
 
 	"github.com/bits-and-blooms/bitset"
+)
+
+const (
+	DEFAULT_DETERMINIZE_WORK_LIMIT = 10000
 )
 
 // DeterminizeAutomaton Determinizes the given automaton.
@@ -32,7 +37,7 @@ func DeterminizeAutomaton(a *Automaton, workLimit int) *Automaton {
 	b := NewBuilder()
 
 	// Same initial values and state will always have the same hashCode
-	initialSet := NewFrozenIntSet([]int{0}, mix32(0)+1, 0)
+	initialSet := NewFrozenIntSet([]int{0}, uint64(mix32(0)+1), 0)
 	// Create state 0:
 	b.CreateState()
 
@@ -603,17 +608,19 @@ func concatenate(automatons ...*Automaton) (*Automaton, error) {
 		numStates := a.GetNumStates()
 
 		var nextA *Automaton
-		if i == len(automatons)-1 {
-			nextA = nil
-		} else {
-			nextA = automatons[i+1]
+		nextIdx := i + 1
+		if nextIdx < len(automatons) {
+			nextA = automatons[nextIdx]
 		}
 
 		for s := 0; s < numStates; s++ {
 			numTransitions := a.InitTransition(s, t)
 			for j := 0; j < numTransitions; j++ {
 				a.GetNextTransition(t)
-				err := result.AddTransition(stateOffset+s, stateOffset+t.Dest, t.Min, t.Max)
+
+				srcState := stateOffset + s
+				destState := stateOffset + t.Dest
+				err := result.AddTransition(srcState, destState, t.Min, t.Max)
 				if err != nil {
 					return nil, err
 				}
@@ -624,30 +631,30 @@ func concatenate(automatons ...*Automaton) (*Automaton, error) {
 				followOffset := stateOffset
 				upto := i + 1
 				for {
-					if followA != nil {
-						// Adds a "virtual" epsilon transition:
-						numTransitions = followA.InitTransition(0, t)
-						for j := 0; j < numTransitions; j++ {
-							followA.GetNextTransition(t)
-							err := result.AddTransition(stateOffset+s, followOffset+numStates+t.Dest, t.Min, t.Max)
-							if err != nil {
-								return nil, err
-							}
-						}
-						if followA.IsAccept(0) {
-							// Keep chaining if followA accepts empty string
-							followOffset += followA.GetNumStates()
-							if upto == len(automatons)-1 {
-								followA = nil
-							} else {
-								followA = automatons[upto+1]
-							}
-							upto++
-						} else {
-							break
-						}
-					} else {
+					if followA == nil {
 						result.SetAccept(stateOffset+s, true)
+						break
+					}
+
+					// Adds a "virtual" epsilon transition:
+					numTransitions = followA.InitTransition(0, t)
+					for j := 0; j < numTransitions; j++ {
+						followA.GetNextTransition(t)
+						err := result.AddTransition(stateOffset+s, followOffset+numStates+t.Dest, t.Min, t.Max)
+						if err != nil {
+							return nil, err
+						}
+					}
+					if followA.IsAccept(0) {
+						// Keep chaining if followA accepts empty string
+						followOffset += followA.GetNumStates()
+						if upto == len(automatons)-1 {
+							followA = nil
+						} else {
+							followA = automatons[upto+1]
+						}
+						upto++
+					} else {
 						break
 					}
 				}
@@ -745,7 +752,7 @@ func determinize(a *Automaton, workLimit int) (*Automaton, error) {
 	//a.writeDot("/l/la/lucene/core/detin.dot");
 
 	// Same initial values and state will always have the same hashCode
-	initialset := NewFrozenIntSet([]int{0}, mix(0)+1, 0)
+	initialset := NewFrozenIntSet([]int{0}, uint64(mix(0)+1), 0)
 
 	// Create state 0:
 	b.CreateState()
@@ -799,7 +806,7 @@ func determinize(a *Automaton, workLimit int) (*Automaton, error) {
 			}
 		}
 
-		if points.count == 0 {
+		if len(points.points) == 0 {
 			// No outgoing transitions -- skip it
 			continue
 		}
@@ -811,7 +818,7 @@ func determinize(a *Automaton, workLimit int) (*Automaton, error) {
 
 		r := s.state
 
-		for i := 0; i < points.count; i++ {
+		for i := 0; i < len(points.points); i++ {
 
 			point := points.points[i].point
 
@@ -903,11 +910,11 @@ func NewPointTransitions() *PointTransitions {
 
 func (p *PointTransitions) reset(point int) {
 	p.point = point
-	p.ends.transitions = p.ends.transitions[:]
+	p.starts.reset()
+	p.ends.reset()
 }
 
 type PointTransitionSet struct {
-	count  int
 	points []*PointTransitions
 	imap   map[int]*PointTransitions
 }
@@ -925,7 +932,6 @@ func (s *PointTransitionSet) next(point int) *PointTransitions {
 	points0 := NewPointTransitions()
 	s.points = append(s.points, points0)
 	points0.reset(point)
-	s.count++
 	return points0
 }
 
@@ -936,18 +942,19 @@ func (s *PointTransitionSet) Add(t *Transition) {
 
 func (s *PointTransitionSet) Sort() {
 	slices.SortStableFunc(s.points, func(e, e2 *PointTransitions) int {
-		if e.point < e2.point {
-			return -1
-		} else if e.point == e2.point {
-			return 0
-		}
-		return 1
+		return cmp.Compare(e.point, e2.point)
+		//if e.point < e2.point {
+		//	return -1
+		//} else if e.point == e2.point {
+		//	return 0
+		//}
+		//return 1
 	})
 }
 
 func (s *PointTransitionSet) Reset() {
 	clear(s.imap)
-	s.count = 0
+	s.points = s.points[:0]
 }
 
 func NewPointTransitionSet() *PointTransitionSet {
