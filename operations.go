@@ -719,6 +719,7 @@ func totalize(a *Automaton) (*Automaton, error) {
 	result.FinishState()
 	return result, nil
 }
+
 func complement(a *Automaton, determinizeWorkLimit int) (*Automaton, error) {
 	a, err := determinize(a, determinizeWorkLimit)
 	if err != nil {

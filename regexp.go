@@ -276,7 +276,11 @@ func WithAutomatonProvider(automatonProvider Provider) ToAutomatonOptions {
 	}
 }
 
-func (r *RegExp) ToAutomaton(determinizeWorkLimit int, options ...ToAutomatonOptions) (*Automaton, error) {
+func (r *RegExp) ToAutomaton() (*Automaton, error) {
+	return r.toAutomaton(DEFAULT_DETERMINIZE_WORK_LIMIT)
+}
+
+func (r *RegExp) toAutomaton(determinizeWorkLimit int, options ...ToAutomatonOptions) (*Automaton, error) {
 	opts := &toAutomatonOptions{
 		automata:          nil,
 		automatonProvider: nil,
@@ -689,16 +693,18 @@ func (r *RegExp) parseRepeatExp() (*RegExp, error) {
 				} else {
 					m = n
 				}
+			} else {
+				m = n
+			}
 
-				if !r.match('}') {
-					return nil, fmt.Errorf("expected '}' at position %d", r.pos)
-				}
+			if !r.match('}') {
+				return nil, fmt.Errorf("expected '}' at position %d", r.pos)
+			}
 
-				if m == -1 {
-					e = makeRepeatMin(r.flags, e, n)
-				} else {
-					e = makeRepeatRange(r.flags, e, n, m)
-				}
+			if m == -1 {
+				e = makeRepeatMin(r.flags, e, n)
+			} else {
+				e = makeRepeatRange(r.flags, e, n, m)
 			}
 		}
 	}
