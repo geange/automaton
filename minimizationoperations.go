@@ -9,7 +9,7 @@ func Minimize(a *Automaton, determinizeWorkLimit int) (*Automaton, error) {
 	}
 
 	// TODO: fix it
-	return a, nil
+	return determinize(a, determinizeWorkLimit)
 }
 
 type IntPair struct {
